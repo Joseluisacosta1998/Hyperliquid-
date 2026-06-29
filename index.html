@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HL Chart</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0b0f;--bg2:#11131a;--bg3:#1a1d27;--bg4:#21263a;
+    --green:#00d4aa;--red:#ff3b5c;--yellow:#f5a623;
+    --text:#e2e8f0;--muted:#6b7280;--border:#1e2235;
+    --font-mono:'JetBrains Mono',monospace;--font-ui:'Inter',sans-serif;
+  }
+  body{background:var(--bg);color:var(--text);font-family:var(--font-ui);overflow:hidden;height:100vh;display:flex;flex-direction:column}
+  /* TOP BAR */
+  #topbar{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+  #asset-btn{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text);transition:all .15s}
+  #asset-btn:hover{border-color:var(--green);color:var(--green)}
+  #asset-btn .arrow{font-size:9px;color:var(--muted)}
+  .tf-group{display:flex;gap:3px}
+  .tf-btn{padding:4px 8px;border-radius:4px;border:none;background:transparent;color:var(--muted);font-family:var(--font-mono);font-size:11px;cursor:pointer;transition:all .12s}
+  .tf-btn:hover{color:var(--text);background:var(--bg3)}
+  .tf-btn.active{background:var(--bg4);color:var(--green);font-weight:600}
+  .stat-block{display:flex;flex-direction:column;gap:1px;padding:0 10px;border-left:1px solid var(--border)}
+  .stat-label{font-size:10px;color:var(--muted);font-family:var(--font-mono)}
+  .stat-value{font-size:12px;font-family:var(--font-mono);font-weight:500}
+  .stat-value.up{color:var(--green)}.stat-value.down{color:var(--red)}.stat-value.neutral{color:var(--yellow)}
+  #price-display{font-family:var(--font-mono);font-size:20px;font-weight:600}
+  #price-change{font-family:var(--font-mono);font-size:12px;margin-left:6px}
+  /* SEARCH MODAL */
+  #search-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:flex-start;justify-content:center;padding-top:60px}
+  #search-overlay.open{display:flex}
+  #search-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;width:460px;max-height:520px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  #search-input{padding:14px 16px;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:14px;outline:none;width:100%}
+  #search-input::placeholder{color:var(--muted)}
+  #asset-list{overflow-y:auto;max-height:420px}
+  .asset-item{padding:10px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .1s;border-bottom:1px solid rgba(30,34,53,.5)}
+  .asset-item:hover{background:var(--bg3)}
+  .asset-item .name{font-family:var(--font-mono);font-size:13px;font-weight:500}
+  .asset-item .tag{font-size:10px;color:var(--muted);padding:2px 6px;border-radius:3px;background:var(--bg3)}
+  /* MAIN CHART AREA */
+  #main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+  #chart-canvas{flex:1;display:block;cursor:crosshair}
+  /* BOTTOM STATS BAR */
+  #bottombar{display:flex;align-items:center;gap:0;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0;padding:0}
+  .bottom-stat{padding:6px 16px;border-right:1px solid var(--border);display:flex;gap:8px;align-items:center}
+  .bottom-stat .bl{font-size:10px;color:var(--muted);font-family:var(--font-mono)}
+  .bottom-stat .bv{font-size:11px;font-family:var(--font-mono);font-weight:500}
+  /* TOOLTIP */
+  #tooltip{position:absolute;pointer-events:none;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:var(--font-mono);font-size:11px;display:none;z-index:10;white-space:nowrap;min-width:160px}
+  #tooltip .t-row{display:flex;justify-content:space-between;gap:16px;padding:1px 0}
+  #tooltip .t-lbl{color:var(--muted)}
+  /* CROSSHAIR lines shown via canvas */
+  /* TREND ZONE LEGEND */
+  #zone-legend{position:absolute;top:8px;right:8px;background:rgba(10,11,15,.8);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:var(--font-mono);font-size:10px;display:flex;flex-direction:column;gap:4px}
+  .z-row{display:flex;align-items:center;gap:6px}
+  .z-dot{width:8px;height:8px;border-radius:2px}
+  /* LOADING */
+  #loader{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:20}
+  .spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #loader-text{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+  /* scrollbar */
+  #asset-list::-webkit-scrollbar{width:4px}
+  #asset-list::-webkit-scrollbar-track{background:var(--bg2)}
+  #asset-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <button id="asset-btn">
+    <span id="asset-name">BTC</span>
+    <span id="asset-icon">-PERP</span>
+    <span class="arrow">▼</span>
+  </button>
+  <div style="display:flex;flex-direction:column;gap:1px;margin-left:4px">
+    <span id="price-display" class="up">—</span>
+    <span id="price-change" class="up">—</span>
+  </div>
+  <div class="tf-group" style="margin-left:8px">
+    <button class="tf-btn" data-tf="1">1m</button>
+    <button class="tf-btn" data-tf="5">5m</button>
+    <button class="tf-btn active" data-tf="15">15m</button>
+    <button class="tf-btn" data-tf="60">1h</button>
+    <button class="tf-btn" data-tf="240">4h</button>
+    <button class="tf-btn" data-tf="1440">1D</button>
+  </div>
+  <div class="stat-block">
+    <span class="stat-label">24h High</span>
+    <span class="stat-value up" id="stat-high">—</span>
+  </div>
+  <div class="stat-block">
+    <span class="stat-label">24h Low</span>
+    <span class="stat-value down" id="stat-low">—</span>
+  </div>
+  <div class="stat-block">
+    <span class="stat-label">24h Vol</span>
+    <span class="stat-value" id="stat-vol" style="color:var(--text)">—</span>
+  </div>
+  <div class="stat-block">
+    <span class="stat-label">Open Interest</span>
+    <span class="stat-value neutral" id="stat-oi">—</span>
+  </div>
+  <div class="stat-block">
+    <span class="stat-label">Funding</span>
+    <span class="stat-value" id="stat-funding">—</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="loader"><div class="spinner"></div><div id="loader-text">Loading market data…</div></div>
+  <canvas id="chart-canvas"></canvas>
+  <div id="tooltip">
+    <div class="t-row"><span class="t-lbl">Time</span><span id="tt-time">—</span></div>
+    <div class="t-row"><span class="t-lbl">Open</span><span id="tt-open">—</span></div>
+    <div class="t-row"><span class="t-lbl">High</span><span id="tt-high">—</span></div>
+    <div class="t-row"><span class="t-lbl">Low</span><span id="tt-low">—</span></div>
+    <div class="t-row"><span class="t-lbl">Close</span><span id="tt-close">—</span></div>
+    <div class="t-row"><span class="t-lbl">Volume</span><span id="tt-vol">—</span></div>
+  </div>
+  <div id="zone-legend">
+    <div style="font-size:10px;color:var(--muted);margin-bottom:2px">Trend Zones</div>
+    <div class="z-row"><div class="z-dot" style="background:rgba(0,212,170,.35)"></div><span style="color:var(--green)">Bullish</span></div>
+    <div class="z-row"><div class="z-dot" style="background:rgba(255,59,92,.35)"></div><span style="color:var(--red)">Bearish</span></div>
+    <div class="z-row"><div class="z-dot" style="background:rgba(245,166,35,.35)"></div><span style="color:var(--yellow)">Sideways</span></div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div id="bottombar">
+  <div class="bottom-stat"><span class="bl">Mark Price</span><span class="bv" id="b-mark">—</span></div>
+  <div class="bottom-stat"><span class="bl">Index Price</span><span class="bv" id="b-index">—</span></div>
+  <div class="bottom-stat"><span class="bl">Total Vol (USDC)</span><span class="bv" id="b-vol">—</span></div>
+  <div class="bottom-stat"><span class="bl">Open Interest</span><span class="bv" id="b-oi">—</span></div>
+  <div class="bottom-stat"><span class="bl">Funding Rate</span><span class="bv" id="b-fund">—</span></div>
+  <div class="bottom-stat"><span class="bl">Next Funding</span><span class="bv" id="b-nextfund" style="color:var(--yellow)">—</span></div>
+</div>
+
+<!-- SEARCH MODAL -->
+<div id="search-overlay">
+  <div id="search-box">
+    <input id="search-input" placeholder="Search asset… (e.g. ETH, SOL)" autofocus/>
+    <div id="asset-list"></div>
+  </div>
+</div>
+
+<script>
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const API = 'https://api.hyperliquid.xyz/info';
+const GREEN='#00d4aa', RED='#ff3b5c', YELLOW='#f5a623';
+const BG='#0a0b0f', BG2='#11131a', BG3='#1a1d27', BORDER='#1e2235', MUTED='#6b7280', TEXT='#e2e8f0';
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let candles=[], asset='BTC', interval=15, allAssets=[];
+let offsetX=0, scale=1, isDragging=false, dragStart=0, dragOffset=0;
+let mouseX=-1, mouseY=-1;
+let animFrame=null;
+
+// ─── DOM ──────────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('chart-canvas');
+const ctx=canvas.getContext('2d');
+const loader=document.getElementById('loader');
+const loaderText=document.getElementById('loader-text');
+const tooltip=document.getElementById('tooltip');
+
+// ─── RESIZE ───────────────────────────────────────────────────────────────────
+function resize(){
+  const main=document.getElementById('main');
+  canvas.width=main.clientWidth;
+  canvas.height=main.clientHeight;
+  draw();
+}
+window.addEventListener('resize',resize);
+
+// ─── FETCH ASSETS ─────────────────────────────────────────────────────────────
+async function fetchAssets(){
+  try{
+    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'meta'})});
+    const d=await r.json();
+    allAssets=(d.universe||[]).map(a=>a.name).sort();
+    if(allAssets.length===0)allAssets=['BTC','ETH','SOL','ARB','OP','AVAX','DOGE','BNB','MATIC','LTC','ATOM','LINK','UNI','APT','SUI','INJ','TIA','NEAR','SEI','STX'];
+  }catch(e){
+    allAssets=['BTC','ETH','SOL','ARB','OP','AVAX','DOGE','BNB','MATIC','LTC','ATOM','LINK','UNI','APT','SUI','INJ','TIA','NEAR','SEI','STX','WIF','BONK','JTO','PYTH','JUP','RNDR','FTM','AAVE','CRV','MKR'];
+  }
+  renderAssetList('');
+}
+
+// ─── FETCH CANDLES ────────────────────────────────────────────────────────────
+async function fetchCandles(){
+  loader.style.display='flex';
+  loaderText.textContent=`Loading ${asset}-PERP ${interval}m…`;
+  try{
+    const end=Date.now();
+    const start=end - interval*60*1000*300;
+    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'candleSnapshot',req:{coin:asset,interval:interval+'m',startTime:start,endTime:end}})});
+    const d=await r.json();
+    candles=(d||[]).map(c=>({
+      t:c.t, o:parseFloat(c.o), h:parseFloat(c.h), l:parseFloat(c.l), c:parseFloat(c.c), v:parseFloat(c.v)
+    }));
+    if(candles.length===0)throw new Error('no data');
+    offsetX=0; scale=1;
+    fitChart();
+    fetchMeta();
+  }catch(e){
+    loaderText.textContent='Error loading data. Retrying…';
+    setTimeout(fetchCandles,3000);
+    return;
+  }
+  loader.style.display='none';
+  draw();
+}
+
+// ─── FETCH META (OI, FUNDING) ─────────────────────────────────────────────────
+async function fetchMeta(){
+  try{
+    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'metaAndAssetCtxs'})});
+    const d=await r.json();
+    const meta=d[0]?.universe||[];
+    const ctx2=d[1]||[];
+    const idx=meta.findIndex(m=>m.name===asset);
+    if(idx>=0&&ctx2[idx]){
+      const info=ctx2[idx];
+      const fr=parseFloat(info.funding)*100;
+      const oi=parseFloat(info.openInterest);
+      const mark=parseFloat(info.markPx);
+      const oracle=parseFloat(info.oraclePx);
+      setEl('stat-oi',fmtNum(oi)+' '+asset,'neutral');
+      setEl('stat-funding',(fr>=0?'+':'')+fr.toFixed(4)+'%',fr>=0?'up':'down');
+      setEl('b-mark',fmtPrice(mark));
+      setEl('b-index',fmtPrice(oracle));
+      setEl('b-oi',fmtNum(oi)+' '+asset);
+      setEl('b-fund',(fr>=0?'+':'')+fr.toFixed(4)+'%');
+      // next funding ~ every hour
+      const now=new Date();
+      const next=new Date(now);next.setMinutes(0,0,0);next.setHours(next.getHours()+1);
+      const diff=Math.round((next-now)/60000);
+      document.getElementById('b-nextfund').textContent=diff+'m';
+    }
+  }catch(e){}
+  // 24h stats from candles
+  if(candles.length>0){
+    const last=candles[candles.length-1];
+    const first=candles[0];
+    const highs=candles.map(c=>c.h); const lows=candles.map(c=>c.l);
+    const totalVol=candles.reduce((s,c)=>s+c.v,0);
+    document.getElementById('stat-high').textContent=fmtPrice(Math.max(...highs));
+    document.getElementById('stat-low').textContent=fmtPrice(Math.min(...lows));
+    document.getElementById('stat-vol').textContent=fmtNum(totalVol);
+    document.getElementById('b-vol').textContent='$'+fmtNum(totalVol*last.c);
+    const chg=((last.c-first.o)/first.o*100);
+    document.getElementById('price-display').textContent=fmtPrice(last.c);
+    document.getElementById('price-display').className=chg>=0?'up':'down';
+    document.getElementById('price-change').textContent=(chg>=0?'+':'')+chg.toFixed(2)+'%';
+    document.getElementById('price-change').style.color=chg>=0?GREEN:RED;
+  }
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function fmtPrice(p){
+  if(!p||isNaN(p))return'—';
+  if(p>=1000)return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  if(p>=1)return p.toFixed(4);
+  return p.toFixed(6);
+}
+function fmtNum(n){
+  if(n>=1e9)return(n/1e9).toFixed(2)+'B';
+  if(n>=1e6)return(n/1e6).toFixed(2)+'M';
+  if(n>=1e3)return(n/1e3).toFixed(1)+'K';
+  return n.toFixed(0);
+}
+function setEl(id,txt,cls){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.textContent=txt;
+  if(cls){el.className='stat-value '+(cls||'')}
+}
+
+// ─── CHART LAYOUT ─────────────────────────────────────────────────────────────
+const PAD={top:20,right:80,bottom:30,left:10};
+const VOL_RATIO=0.18; // volume takes 18% of chart height overlaid at bottom
+
+function fitChart(){
+  if(!candles.length)return;
+  const W=canvas.width-PAD.left-PAD.right;
+  // show last ~120 candles by default
+  const show=Math.min(120,candles.length);
+  scale=W/show;
+  offsetX=candles.length-show;
+}
+
+function getVisible(){
+  const W=canvas.width-PAD.left-PAD.right;
+  const candleW=Math.max(1,scale);
+  const count=Math.ceil(W/candleW)+2;
+  const start=Math.max(0,Math.floor(offsetX));
+  const end=Math.min(candles.length,start+count);
+  return candles.slice(start,end);
+}
+
+function candleX(i){
+  const W=canvas.width-PAD.left-PAD.right;
+  const startIdx=Math.floor(offsetX);
+  return PAD.left+(i-startIdx)*scale + scale/2;
+}
+
+function priceRange(visible){
+  let lo=Infinity,hi=-Infinity;
+  for(const c of visible){if(c.l<lo)lo=c.l;if(c.h>hi)hi=c.h;}
+  const pad=(hi-lo)*0.06;
+  return{lo:lo-pad,hi:hi+pad};
+}
+
+function priceToY(p,lo,hi){
+  const H=canvas.height-PAD.top-PAD.bottom;
+  return PAD.top + H*(1-(p-lo)/(hi-lo));
+}
+
+// ─── TREND ZONE DETECTION ─────────────────────────────────────────────────────
+// Uses a simple multi-candle lookback to classify trend segments
+function detectTrendZones(candles){
+  const LOOKBACK=5; // candles to confirm trend
+  const SIDEWAYS_THRESH=0.003; // 0.3% per candle average move = sideways
+  const zones=[];
+  if(candles.length<LOOKBACK+1)return zones;
+
+  let zoneStart=0;
+  let currentTrend=classifyTrend(candles,0,LOOKBACK);
+
+  for(let i=LOOKBACK;i<candles.length;i++){
+    const t=classifyTrend(candles,i-LOOKBACK,LOOKBACK);
+    if(t!==currentTrend){
+      zones.push({start:zoneStart,end:i-1,trend:currentTrend});
+      zoneStart=i-1;
+      currentTrend=t;
+    }
+  }
+  zones.push({start:zoneStart,end:candles.length-1,trend:currentTrend});
+  return zones;
+}
+
+function classifyTrend(candles,from,n){
+  const slice=candles.slice(from,from+n);
+  if(slice.length<2)return'sideways';
+  // Linear regression slope on closes
+  let sumX=0,sumY=0,sumXY=0,sumX2=0;
+  const len=slice.length;
+  for(let i=0;i<len;i++){sumX+=i;sumY+=slice[i].c;sumXY+=i*slice[i].c;sumX2+=i*i;}
+  const slope=(len*sumXY-sumX*sumY)/(len*sumX2-sumX*sumX);
+  const avgPrice=sumY/len;
+  const normSlope=slope/avgPrice; // normalized slope per candle
+  if(normSlope>0.0015)return'bullish';
+  if(normSlope<-0.0015)return'bearish';
+  return'sideways';
+}
+
+// ─── DRAW ─────────────────────────────────────────────────────────────────────
+function draw(){
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  if(!candles.length)return;
+
+  const visible=getVisible();
+  if(!visible.length)return;
+  const {lo,hi}=priceRange(visible);
+  const startIdx=Math.floor(offsetX);
+
+  // ── Background
+  ctx.fillStyle=BG;
+  ctx.fillRect(0,0,W,H);
+
+  // ── Grid
+  drawGrid(lo,hi,W,H);
+
+  // ── Trend Zones (draw behind candles)
+  drawTrendZones(startIdx,lo,hi,H);
+
+  // ── Volume bars (overlay, bottom of chart)
+  drawVolume(visible,startIdx,lo,hi,H);
+
+  // ── Candles
+  drawCandles(visible,startIdx,lo,hi,H);
+
+  // ── Price axis
+  drawPriceAxis(lo,hi,W,H);
+
+  // ── Time axis
+  drawTimeAxis(visible,startIdx,H);
+
+  // ── Crosshair
+  if(mouseX>PAD.left&&mouseX<W-PAD.right&&mouseY>PAD.top&&mouseY<H-PAD.bottom){
+    drawCrosshair(W,H);
+  }
+
+  // ── Last price line
+  if(candles.length){
+    const lastP=candles[candles.length-1].c;
+    const y=priceToY(lastP,lo,hi);
+    const isUp=candles[candles.length-1].c>=candles[candles.length-1].o;
+    ctx.save();
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle=isUp?'rgba(0,212,170,.5)':'rgba(255,59,92,.5)';
+    ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
+    ctx.restore();
+    // price tag
+    ctx.fillStyle=isUp?GREEN:RED;
+    ctx.fillRect(W-PAD.right+1,y-9,PAD.right-1,18);
+    ctx.fillStyle=BG;
+    ctx.font='bold 10px JetBrains Mono,monospace';
+    ctx.textAlign='left';
+    ctx.fillText(fmtPrice(lastP),W-PAD.right+4,y+4);
+  }
+}
+
+function drawGrid(lo,hi,W,H){
+  const priceStep=niceStep((hi-lo)/6);
+  const firstP=Math.ceil(lo/priceStep)*priceStep;
+  ctx.strokeStyle=BORDER; ctx.lineWidth=1; ctx.setLineDash([]);
+  for(let p=firstP;p<=hi;p+=priceStep){
+    const y=priceToY(p,lo,hi);
+    if(y<PAD.top||y>H-PAD.bottom)continue;
+    ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
+  }
+}
+
+function drawTrendZones(startIdx,lo,hi,H){
+  const allVisible=candles; // zones over ALL candles, draw only visible part
+  const zones=detectTrendZones(allVisible);
+  for(const z of zones){
+    // only draw if zone overlaps visible range
+    const x1=candleX(z.start)-scale/2;
+    const x2=candleX(z.end)+scale/2;
+    if(x2<PAD.left||x1>canvas.width-PAD.right)continue;
+    // determine Y bounds: zone spans from candle lows to highs in that range
+    const slice=candles.slice(z.start,z.end+1);
+    if(!slice.length)continue;
+    let zLo=Infinity,zHi=-Infinity;
+    for(const c of slice){if(c.l<zLo)zLo=c.l;if(c.h>zHi)zHi=c.h;}
+    const y1=priceToY(zHi,lo,hi);
+    const y2=priceToY(zLo,lo,hi);
+    let col;
+    if(z.trend==='bullish')col='rgba(0,212,170,0.07)';
+    else if(z.trend==='bearish')col='rgba(255,59,92,0.07)';
+    else col='rgba(245,166,35,0.06)';
+    ctx.fillStyle=col;
+    ctx.fillRect(Math.max(PAD.left,x1),y1,Math.min(canvas.width-PAD.right,x2)-Math.max(PAD.left,x1),y2-y1);
+    // border top line
+    let borderCol;
+    if(z.trend==='bullish')borderCol='rgba(0,212,170,0.25)';
+    else if(z.trend==='bearish')borderCol='rgba(255,59,92,0.25)';
+    else borderCol='rgba(245,166,35,0.22)';
+    ctx.strokeStyle=borderCol;ctx.lineWidth=1;ctx.setLineDash([2,3]);
+    ctx.beginPath();
+    ctx.moveTo(Math.max(PAD.left,x1),y1);
+    ctx.lineTo(Math.min(canvas.width-PAD.right,x2),y1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(Math.max(PAD.left,x1),y2);
+    ctx.lineTo(Math.min(canvas.width-PAD.right,x2),y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawVolume(visible,startIdx,lo,hi,H){
+  const chartH=H-PAD.top-PAD.bottom;
+  const volH=chartH*VOL_RATIO; // max volume bar height
+  const maxVol=Math.max(...visible.map(c=>c.v))||1;
+  for(let i=0;i<visible.length;i++){
+    const c=visible[i];
+    const x=candleX(startIdx+i);
+    const bw=Math.max(1,scale*0.7);
+    const bh=(c.v/maxVol)*volH;
+    const y=H-PAD.bottom-bh;
+    ctx.fillStyle=c.c>=c.o?'rgba(0,212,170,0.2)':'rgba(255,59,92,0.2)';
+    ctx.fillRect(x-bw/2,y,bw,bh);
+  }
+}
+
+function drawCandles(visible,startIdx,lo,hi,H){
+  for(let i=0;i<visible.length;i++){
+    const c=visible[i];
+    const x=candleX(startIdx+i);
+    const isUp=c.c>=c.o;
+    const col=isUp?GREEN:RED;
+    const bw=Math.max(1,scale*0.65-1);
+    // wick
+    ctx.strokeStyle=col; ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(x,priceToY(c.h,lo,hi));
+    ctx.lineTo(x,priceToY(c.l,lo,hi));
+    ctx.stroke();
+    // body
+    const openY=priceToY(c.o,lo,hi);
+    const closeY=priceToY(c.c,lo,hi);
+    const bodyY=Math.min(openY,closeY);
+    const bodyH=Math.max(1,Math.abs(openY-closeY));
+    ctx.fillStyle=isUp?'rgba(0,212,170,0.85)':'rgba(255,59,92,0.85)';
+    ctx.fillRect(x-bw/2,bodyY,bw,bodyH);
+    // border
+    ctx.strokeStyle=col; ctx.lineWidth=0.5;
+    ctx.strokeRect(x-bw/2,bodyY,bw,bodyH);
+  }
+}
+
+function drawPriceAxis(lo,hi,W,H){
+  const priceStep=niceStep((hi-lo)/6);
+  const firstP=Math.ceil(lo/priceStep)*priceStep;
+  ctx.fillStyle=MUTED; ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign='left';
+  for(let p=firstP;p<=hi;p+=priceStep){
+    const y=priceToY(p,lo,hi);
+    if(y<PAD.top||y>H-PAD.bottom)continue;
+    ctx.fillText(fmtPrice(p),W-PAD.right+4,y+3);
+  }
+}
+
+function drawTimeAxis(visible,startIdx,H){
+  if(!visible.length)return;
+  const step=Math.max(1,Math.floor(20/scale));
+  ctx.fillStyle=MUTED; ctx.font='9px JetBrains Mono,monospace'; ctx.textAlign='center';
+  for(let i=0;i<visible.length;i+=step){
+    const c=visible[i];
+    const x=candleX(startIdx+i);
+    if(x<PAD.left+20||x>canvas.width-PAD.right-20)continue;
+    const d=new Date(c.t);
+    const lbl=d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+    ctx.fillText(lbl,x,H-PAD.bottom+14);
+  }
+}
+
+function drawCrosshair(W,H){
+  ctx.save();
+  ctx.strokeStyle='rgba(107,114,128,0.5)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(mouseX,PAD.top);ctx.lineTo(mouseX,H-PAD.bottom);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(PAD.left,mouseY);ctx.lineTo(W-PAD.right,mouseY);ctx.stroke();
+  ctx.restore();
+  // price tag on axis
+  const {lo,hi}=priceRange(getVisible());
+  const p=lo+(hi-lo)*(1-(mouseY-PAD.top)/(H-PAD.top-PAD.bottom));
+  ctx.fillStyle=BG3; ctx.fillRect(W-PAD.right+1,mouseY-9,PAD.right-1,18);
+  ctx.fillStyle=TEXT; ctx.font='9px JetBrains Mono,monospace'; ctx.textAlign='left';
+  ctx.fillText(fmtPrice(p),W-PAD.right+4,mouseY+4);
+}
+
+function niceStep(rough){
+  const e=Math.pow(10,Math.floor(Math.log10(rough)));
+  const f=rough/e;
+  if(f<1.5)return e;
+  if(f<3)return 2*e;
+  if(f<7)return 5*e;
+  return 10*e;
+}
+
+// ─── MOUSE INTERACTION ────────────────────────────────────────────────────────
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  mouseX=e.clientX-r.left; mouseY=e.clientY-r.top;
+  if(isDragging){
+    const dx=e.clientX-dragStart;
+    offsetX=Math.max(0,Math.min(candles.length-1,dragOffset-dx/scale));
+  }
+  updateTooltip();
+  draw();
+});
+canvas.addEventListener('mouseleave',()=>{mouseX=-1;mouseY=-1;tooltip.style.display='none';draw();});
+canvas.addEventListener('mousedown',e=>{isDragging=true;dragStart=e.clientX;dragOffset=offsetX;});
+canvas.addEventListener('mouseup',()=>{isDragging=false;});
+
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const W=canvas.width-PAD.left-PAD.right;
+  const factor=e.deltaY<0?1.12:0.88;
+  const oldScale=scale;
+  scale=Math.max(2,Math.min(50,scale*factor));
+  // zoom toward mouse
+  const mx=(mouseX-PAD.left);
+  const candleAtMouse=offsetX+mx/oldScale;
+  offsetX=Math.max(0,candleAtMouse-mx/scale);
+},{passive:false});
+
+function updateTooltip(){
+  if(!candles.length)return;
+  const startIdx=Math.floor(offsetX);
+  const idx=Math.round((mouseX-PAD.left)/scale)+startIdx;
+  if(idx<0||idx>=candles.length){tooltip.style.display='none';return;}
+  const c=candles[idx];
+  const d=new Date(c.t);
+  const fmt=d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+  document.getElementById('tt-time').textContent=fmt;
+  document.getElementById('tt-open').textContent=fmtPrice(c.o);
+  document.getElementById('tt-high').textContent=fmtPrice(c.h);
+  document.getElementById('tt-low').textContent=fmtPrice(c.l);
+  document.getElementById('tt-close').textContent=fmtPrice(c.c);
+  document.getElementById('tt-vol').textContent=fmtNum(c.v)+' '+asset;
+  document.getElementById('tt-close').style.color=c.c>=c.o?GREEN:RED;
+  tooltip.style.display='block';
+  const tx=mouseX+14; const ty=mouseY-10;
+  tooltip.style.left=(tx+160>canvas.width?mouseX-170:tx)+'px';
+  tooltip.style.top=Math.max(0,ty)+'px';
+}
+
+// ─── ASSET SEARCH ─────────────────────────────────────────────────────────────
+function renderAssetList(q){
+  const list=document.getElementById('asset-list');
+  const filtered=q?allAssets.filter(a=>a.toLowerCase().includes(q.toLowerCase())):allAssets;
+  list.innerHTML='';
+  for(const a of filtered.slice(0,60)){
+    const div=document.createElement('div');
+    div.className='asset-item';
+    div.innerHTML=`<span class="name">${a}-PERP</span><span class="tag">PERP</span>`;
+    div.addEventListener('click',()=>selectAsset(a));
+    list.appendChild(div);
+  }
+}
+
+function selectAsset(a){
+  asset=a;
+  document.getElementById('asset-name').textContent=a;
+  document.getElementById('search-overlay').classList.remove('open');
+  fetchCandles();
+}
+
+document.getElementById('asset-btn').addEventListener('click',()=>{
+  document.getElementById('search-overlay').classList.add('open');
+  document.getElementById('search-input').value='';
+  renderAssetList('');
+  setTimeout(()=>document.getElementById('search-input').focus(),50);
+});
+document.getElementById('search-input').addEventListener('input',e=>renderAssetList(e.target.value));
+document.getElementById('search-overlay').addEventListener('click',e=>{
+  if(e.target===document.getElementById('search-overlay'))
+    document.getElementById('search-overlay').classList.remove('open');
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')document.getElementById('search-overlay').classList.remove('open');
+});
+
+// ─── TIMEFRAME BUTTONS ────────────────────────────────────────────────────────
+document.querySelectorAll('.tf-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    interval=parseInt(btn.dataset.tf);
+    fetchCandles();
+  });
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+resize();
+fetchAssets();
+fetchCandles();
+// Refresh price every 15s
+setInterval(()=>{if(candles.length)fetchCandles();},15000);
+</script>
+</body>
+</html>
