@@ -1794,6 +1794,40 @@ function initSupertrendPanel(){
   });
 }
 
+// ─── SCROLL TÁCTIL MANUAL DEL PANEL DE INDICADORES ────────────────────────────
+// No nos fiamos del todo de cómo cada navegador/Android compone `touch-action`
+// cuando hay ancestros con touch-action:none (el body, para no romper el pan del
+// gráfico). Para garantizar que el panel SIEMPRE se pueda desplazar con el dedo,
+// manejamos el scroll manualmente moviendo panel.scrollTop, excepto cuando el
+// toque empieza sobre un control interactivo (slider, número, toggle, chip,
+// botón, estrella de favorito), donde dejamos que el control reciba el gesto.
+function initIndPanelTouchScroll(){
+  const panel = document.getElementById('ind-panel');
+  if(!panel) return;
+  const INTERACTIVE_SEL = 'input, button, .cfg-chip, .ind-toggle, .ema-toggle, .fav-star';
+  let mode = null, startY = 0, startTop = 0;
+  panel.addEventListener('touchstart', e=>{
+    if(e.touches.length!==1){ mode=null; return; }
+    if(e.target.closest(INTERACTIVE_SEL)){ mode='interactive'; return; }
+    mode='scroll';
+    startY = e.touches[0].clientY;
+    startTop = panel.scrollTop;
+  }, {passive:true});
+  panel.addEventListener('touchmove', e=>{
+    if(mode!=='scroll') return;
+    const y = e.touches[0].clientY;
+    const dy = startY - y;
+    const max = panel.scrollHeight - panel.clientHeight;
+    let next = startTop + dy;
+    if(next < 0) next = 0;
+    if(next > max) next = max;
+    panel.scrollTop = next;
+    e.preventDefault();
+  }, {passive:false});
+  panel.addEventListener('touchend', ()=>{ mode=null; }, {passive:true});
+  panel.addEventListener('touchcancel', ()=>{ mode=null; }, {passive:true});
+}
+
 // ─── UI: panel desplegable de indicadores ─────────────────────────────────────
 function initIndicatorsPanel(){
   const btn=document.getElementById('ind-btn');
@@ -1828,6 +1862,7 @@ function initIndicatorsPanel(){
   buildLiqLevChips();
   buildEmaRows();
   initSupertrendPanel();
+  initIndPanelTouchScroll();
 
   const tol=document.getElementById('sr-tol'), tolVal=document.getElementById('sr-tol-val');
   tol.value=Math.round(ovCfg.srTol*100);
